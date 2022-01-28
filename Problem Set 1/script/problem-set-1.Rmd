@@ -1,0 +1,110 @@
+---
+title: "Problem Set 1"
+author: "Zhengting (Johnathan) He"
+date: "2022/1/28"
+output: html_document
+---
+
+
+```{r "setup", include = FALSE}
+require("knitr")
+opts_knit$set(root.dir = "D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 1")
+```
+
+
+```{r, message = FALSE}
+# set up
+require(tidyverse)
+require(gtsummary)
+
+setwd("D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 1")
+
+data <- read_csv("./data/nepal621.csv")
+```
+
+
+**1. Suppose you are interested in choosing an appropriate sample size for estimating the 
+16- month mortality rate for children younger than 3 years of age in a developing country in which vitamin A supplementation is not currently available.**
+
+
+**a. Use the available information from the Nepal data set to choose a sample size so that you estimate this rate to within +/- 0.5%.**
+
+
+---
+
+```{r, results = "asis"}
+data %>% 
+    filter(age == "<1" | age == "1-2") %>% 
+    filter(trt == "Placebo") %>% 
+    tbl_summary(include = "status",
+                digits = list(status ~ 2))
+```
+
+---
+
+According to the summary statistics above, estimated $p = \hat{p} = 0.0294$, estimated $q = \hat{q} = 0.9706$.
+
+$n = \frac{(z_{\alpha/2})^2 * pq}{d^2} = \frac{1.96^2*0.0294*0.9706}{0.005^2} = 4384.90 \approx 4385$.
+
+---
+
+
+**b. Now, suppose *no information* is available from this Nepal study. Determine what sample
+size would be required for each of a range of plausible values of the mortality rate.
+Summarize your sample size findings in a *table*.**
+
+
+---
+
+```{r}
+seq(0.05, 0.95, 0.05) %>% 
+    map_dfr(~ tibble(`Mortality rate` = .x,
+                     `Sample size (N)` = ceiling(qnorm(0.975)^2) * (.x) * (1 - .x) / 0.005^2)) %>% 
+    kable()
+```
+
+---
+
+**2. Now suppose you have a chance to investigate the effect of vitamin A supplementation
+on the mortality of children under 3 years of age. The `power.prop.test()` command in
+R can be used with the results of the Nepal trial to choose the size of the vitamin A and
+control groups (assuming equal sample sizes for both groups) for the new study. Confirm
+from the data set that the 16-month mortality in the placebo group is 0.0294 and the 16-
+month mortality in the Vitamin A group is 0.0245 for the Nepal study. The estimated
+relative risk of death in the placebo group as compared to the Vitamin A group is
+0.029/0.0245 = 1.2. Assuming a significance level of 0.05 and power of 80%, the sample
+size needed in the new study to detect a relative risk of 1.2 is *17,144 children per group*
+according to the results on the next page. A total sample size of 34,288 children would be
+required.**
+
+
+```{r}
+power.prop.test(n = NULL, p1 = 0.0294, p2 = 0.0245, sig.level = 0.05, power = 0.8,
+                alternative = "two.sided")
+```
+
+
+**3. Verify R’s calculations for part 2) by hand using the method learned in class. Expect your
+answer to be close in value to, but not exactly the same as, that provided by `R`, due to
+rounding in hand calculations. (`Stata` uses a continuity correction that `R` doesn’t, so the
+value calculated from `Stata` will also be different than the one you calculated by hand and in
+R.)**
+
+
+---
+
+According to the information provided, $p_1 = 0.0294$, $p_2 = 0.0245$, $\alpha = 0.05$, $\beta = 0.2$,
+$\Delta = 0.0245 * (1.2 - 1) = 0.0049$, $\bar{p} = \frac{p_1 + p_2}{2} = 0.02695$.
+
+$n_1 = n_2 = \frac{(z_{\alpha/2}*\sqrt{2*\bar{p}*\bar{q}} + z_{\beta}*\sqrt{p_1*q_1 + p_2*q_2})^2}{\Delta^2} = \frac{(1.96*\sqrt{2*(0.02695)*(1-0.02695)} + 0.84*\sqrt{(0.0294)*(1-0.0294) + (0.0245)*(1-0.0245)})^2}{(0.0049)^2} = 17124.5 \approx 17125$.
+
+---
+
+To avoid differences caused by rounding issues, I used `qnorm()` function to conduct the calculation:
+
+```{r}
+(qnorm(0.025) * sqrt(2 * (0.02695) * (1 - 0.02695)) + qnorm(0.2) * sqrt((0.0294) *
+(1 - 0.0294) + (0.0245) * (1 - 0.0245)))^2/(0.0049^2)
+```
+
+---
