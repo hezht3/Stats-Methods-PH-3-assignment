@@ -1,0 +1,228 @@
+---
+title: "Problem Set 2"
+author: "Zhengting (Johnathan) He"
+date: "2022/2/16"
+output: html_document
+---
+
+
+```{r "setup", include = FALSE}
+require("knitr")
+opts_chunk$set(warning = FALSE, echo = TRUE)
+opts_knit$set(root.dir = "D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 2")
+```
+
+
+```{r, message = FALSE, results = "hide"}
+setwd("D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 2")
+
+require(tidyverse)
+require(survival)
+require(survminer)
+require(gtsummary)
+
+data <- read_csv("./DATA/pbctrial.csv")
+```
+
+
+### **a. Explore the data using descriptive statistics:**
+
+
+```{r}
+skimr::skim(data)
+```
+
+
+### **b. Define a survival object, defining the time variable (`survyr`) and the event (`death == 1`). To do this, you must first install and load the “survival” package:**
+
+
+```{r}
+data <- data %>% 
+    mutate(SurvObj = Surv(survyr, death == 1))
+```
+
+
+### **c. Explore differences in time to death by different baseline variables using graphs and complementary log-log plots.**
+
+
+```{r}
+# estimate survival curves for entire sample
+km.overall <- survfit(SurvObj ~ 1, data = data,
+                      type = "kaplan-meier", conf.type = "log-log")
+km.overall
+```
+
+
+```{r}
+summary(km.overall)
+```
+
+
+```{r}
+# estimate survival curves for drug group
+km.drug = survfit(SurvObj ~ drug, data = data,
+                  type = "kaplan-meier", conf.type = "log-log")
+km.drug
+```
+
+
+```{r}
+summary(km.drug)
+```
+
+
+```{r}
+# plot km curves - overall
+ggsurvplot(km.overall,
+           data = data,
+           risk.table = TRUE,
+           conf.int = TRUE,
+           xlab = "Duration of follow-up (years)",
+           ylab = "Probability of survival",
+           palette = "jama")
+```
+
+
+```{r}
+# plot km curves - drug group
+ggsurvplot(km.drug,
+           data = data,
+           risk.table = TRUE,
+           conf.int = TRUE,
+           xlab = "Duration of follow-up (years)",
+           ylab = "Probability of survival",
+           palette = "jama")
+```
+
+
+```{r}
+# log rank test for equality of survivor functions
+survdiff(SurvObj ~ drug, data = data)
+```
+
+
+```{r}
+# complimentary log-log plot
+ggsurvplot(km.drug,
+           data = data,
+           fun="cloglog",
+           risk.table = TRUE,
+           xlab = "Duration of follow-up (years)",
+           ylab = "Probability of survival",
+           palette = "jama")
+```
+
+
+### **d. Fit several Cox proportional hazards regression models to the ungrouped survival data:**
+
+
+```{r}
+# model 1 - crude estimates
+model1 <- coxph(SurvObj ~ drug, data = data)
+summary(model1)
+```
+
+
+```{r}
+# model 2 - adjusted for sex (disjoint categorical) + bil (continuous) + agegt (disjoint categorical) + histo (disjoint categorical)
+model2 <- coxph(SurvObj ~ drug + sex + bil + agegr_2 + agegr_3 + hstage2 + hstage3 + hstage4, data = data)
+summary(model2)
+```
+
+
+```{r}
+# model 3 - adjusted for sex (disjoint categorical) + bil (continuous) + agegt (continuous) + histo (disjoint categorical)
+# further model agegt as continuous to reduce residual confounding
+model3 <- coxph(SurvObj ~ drug + sex + bil + ageyr + hstage2 + hstage3 + hstage4, data = data)
+summary(model3)
+```
+
+
+```{r}
+# model 4 - adjusted for sex (disjoint categorical) + bil (log transformation) + agegt (continuous) + histo (disjoint categorical)
+# log transformation of bil, since bil is skewed distributed
+model4 <- coxph(SurvObj ~ drug + sex + log(bil) + ageyr + hstage2 + hstage3 + hstage4, data = data)
+summary(model4)
+```
+
+
+```{r, results = "asis"}
+# summary of the results
+tbl_merge(list(model1, model2, model3, model4) %>% 
+              map(~ .x %>% tbl_regression(exponentiate = TRUE)),
+          tab_spanner = c("**Unadjusted**", "**Adjusted model 1**", "**Adjusted model 2**", "**Adjusted model 3**")) %>% 
+    bold_labels()
+```
+
+
+```{r}
+# model selection
+list(model1, model2, model3, model4) %>%
+    map2_dfr(c("Unadjusted", "Adjusted model 1", "Adjusted model 2", "Adjusted model 3"),
+             ~ tibble(Model = .y,
+                     AIC = AIC(.x))) %>% 
+    kable()
+```
+
+
+### **e. Save your `R` script file that documents and archives the steps of your statistical analysis. This file will make your analysis “reproducible.”**
+
+
+### **f. *Summarize your findings in a brief report* (less than two pages with at most one table and one figure) as if for a biomedical/public health journal.**
+
+**A suggested format is:**
+
++ **Introduction – a few sentences about the research question(s)**
+
++ **Data description – simple tabulations describing patient characteristics**
+
++ **Results from multiple models that address question(s) (e.g., bivariate and multivariable)**
+
++ **Graphical display that presents evidence in the data relevant to your scientific question**
+
+
+---
+
+#### **Introduction**
+
+Primary biliary cirrhosis (PBC) is a chronic, progressive cholestatic liver disease of unknown cause that usually affects middle-aged women and eventually leads to liver failure and the need for liver transplantation.[^1] D-penicillamine (DPCA) has potential in decreasing deposition of immune complexes and had the added bonus of impairing the maturation of collagen, thus appear to be a potential effective treatment for PBC.[^2] To explore whether DPCA prolongs life in patients with PBC, researchers conducted a double-blinded randomized trail of a total of 312 patients, by comparing the probability of survival of patients randomized to DPCA group versus placebo group, over time.
+
+[^1]: Kaplan, Marshall M. "Primary biliary cirrhosis." New England Journal of Medicine 335.21 (1996): 1570-1580.
+
+[^2]: James OF. D-penicillamine for primary biliary cirrhosis. Gut. 1985;26(2):109-113. doi:10.1136/gut.26.2.109.
+
+#### **Study population**
+
+```{r, results = "asis"}
+data %>% 
+    select(drug, sex, ageyr, bil, histo) %>% 
+    mutate(drug = recode_factor(drug, "1" = "DPCA", "0" = "Placebo")) %>%
+    mutate(histo = recode_factor(histo, "1" = "Stage 1", "2" = "Stage 2",
+                                        "3" = "Stage 3", "4" = "Stage 4")) %>% 
+    tbl_summary(by = "drug",
+                label = list(sex ~ "Sex",
+                             bil ~ "Serum bilirubin in mg/dl",
+                             histo ~ "Histologic disease stage",
+                             ageyr ~ "Age in years")) %>% 
+    add_overall() %>% 
+    bold_labels()
+```
+
+As shown in the table above, there are 312 patients included in the study, majority of them are female (88%), average age 50, mean serum bilirubin 1.4 mg/dl, and in later stage of histologic disease (Stage 3 & 4). Characteristics of patients in DPCA and placebo group are generally similar, indicating the randomization ensures patients in both group approximately exchangeable.
+
+#### **Results**
+
+```{r}
+ggsurvplot(km.drug,
+           data = data,
+           risk.table = TRUE,
+           conf.int = TRUE,
+           xlab = "Duration of follow-up (years)",
+           ylab = "Probability of survival",
+           palette = "jama")
+```
+
+As shown in the Kaplan-Meier survival curve, the probabilities of survival were similar for the DPCA group and the placebo group. The log-rank test results in a $chi^2 = 0.1$ and an associated p-value = 0.7, indicating no significant differences between the probabilities of survival in DPCA and placebo group. After verifying the proportional hazard assumption, the association between DPCA and mortality was modeled using cox regression model. The crude hazard ratio of the association of DPCA with mortality is 1.06 (95% CI: 0.75, 1.50, p-value = 0.7), indicating there is no statistically significant association between DPCA and mortality, under a significance level of $\alpha = 0.05$. After adjusting for sex, age, serum bilirubin, histologic disease stage, no statistically significant association between DPCA and mortality was found in eith adjustment model under $\alpha = 0.05$. The results may be caused by no actural preventive effects of DPCA on mortality among patients with PBC, or may be a result of insufficient sample size to detect the difference.
+
+---
+

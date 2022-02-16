@@ -43,3 +43,7 @@ Problem Set 1/data
 Problem Set 2/data
 Problem Set 3/data
 Problem Set 4/data
+
+# RMarkdown output
+*.pdf
+*.html
