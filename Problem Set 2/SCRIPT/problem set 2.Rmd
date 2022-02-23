@@ -2,7 +2,10 @@
 title: "Problem Set 2"
 author: "Zhengting (Johnathan) He"
 date: "2022/2/16"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
 ---
 
 
@@ -46,7 +49,15 @@ data <- data %>%
 
 
 ```{r}
-# estimate survival curves for entire sample
+# overall incidence rate
+data %>% 
+    summarise(`incidence.rate` = sum(death)/sum(survyr)) %>% 
+    knitr::kable()
+```
+
+
+```{r}
+# estimate survival for entire sample
 km.overall <- survfit(SurvObj ~ 1, data = data,
                       type = "kaplan-meier", conf.type = "log-log")
 km.overall
@@ -54,20 +65,8 @@ km.overall
 
 
 ```{r}
-summary(km.overall)
-```
-
-
-```{r}
-# estimate survival curves for drug group
-km.drug = survfit(SurvObj ~ drug, data = data,
-                  type = "kaplan-meier", conf.type = "log-log")
-km.drug
-```
-
-
-```{r}
-summary(km.drug)
+summary(km.overall)$table %>% 
+    knitr::kable()
 ```
 
 
@@ -80,6 +79,32 @@ ggsurvplot(km.overall,
            xlab = "Duration of follow-up (years)",
            ylab = "Probability of survival",
            palette = "jama")
+```
+
+
+```{r}
+# incidence rate by drug group
+tab.matrix <- data %>% 
+    group_by(drug) %>% 
+    summarise(`death` = sum(death), `person.time` = sum(survyr)) %>% 
+    select(`death`:`person.time`) %>% 
+    as.matrix()
+epiR::epi.2by2(rbind(tab.matrix[2,], tab.matrix[1,]),
+               method = "cohort.time")
+```
+
+
+```{r}
+# estimate survival curves for drug group
+km.drug = survfit(SurvObj ~ drug, data = data,
+                  type = "kaplan-meier", conf.type = "log-log")
+km.drug
+```
+
+
+```{r}
+summary(km.drug)$table %>% 
+    knitr::kable()
 ```
 
 
@@ -108,9 +133,12 @@ ggsurvplot(km.drug,
            fun="cloglog",
            risk.table = TRUE,
            xlab = "Duration of follow-up (years)",
-           ylab = "Probability of survival",
+           ylab = "-ln[-ln(Survival Probability)]",
            palette = "jama")
 ```
+
+
+There seems to be a large overlap on the survival curves between the two groups, and the incidence rate ratio is not statistically significant under $\alpha = 0.05$. The complimentary log-log plot shows the proportional hazard assumption was roughly met.
 
 
 ### **d. Fit several Cox proportional hazards regression models to the ungrouped survival data:**
@@ -160,9 +188,13 @@ tbl_merge(list(model1, model2, model3, model4) %>%
 list(model1, model2, model3, model4) %>%
     map2_dfr(c("Unadjusted", "Adjusted model 1", "Adjusted model 2", "Adjusted model 3"),
              ~ tibble(Model = .y,
-                     AIC = AIC(.x))) %>% 
+                      `log likelihood` = substr(logLik(.x), 1, 8),
+                      AIC = AIC(.x))) %>% 
     kable()
 ```
+
+
+Based on the log likelihood and AIC statistics, we may choose model 4 (adjustment model 3).
 
 
 ### **e. Save your `R` script file that documents and archives the steps of your statistical analysis. This file will make your analysis “reproducible.”**
@@ -222,7 +254,7 @@ ggsurvplot(km.drug,
            palette = "jama")
 ```
 
-As shown in the Kaplan-Meier survival curve, the probabilities of survival were similar for the DPCA group and the placebo group. The log-rank test results in a $chi^2 = 0.1$ and an associated p-value = 0.7, indicating no significant differences between the probabilities of survival in DPCA and placebo group. After verifying the proportional hazard assumption, the association between DPCA and mortality was modeled using cox regression model. The crude hazard ratio of the association of DPCA with mortality is 1.06 (95% CI: 0.75, 1.50, p-value = 0.7), indicating there is no statistically significant association between DPCA and mortality, under a significance level of $\alpha = 0.05$. After adjusting for sex, age, serum bilirubin, histologic disease stage, no statistically significant association between DPCA and mortality was found in eith adjustment model under $\alpha = 0.05$. The results may be caused by no actural preventive effects of DPCA on mortality among patients with PBC, or may be a result of insufficient sample size to detect the difference.
+As shown in the Kaplan-Meier survival curve, the probabilities of survival were similar for the DPCA group and the placebo group. The log-rank test results in a $\chi^2 = 0.1$ and an associated p-value = 0.7, indicating no significant differences between the probabilities of survival in DPCA and placebo group. After verifying the proportional hazard assumption, the association between DPCA and mortality was modeled using cox regression model. The crude hazard ratio of the association of DPCA with mortality is 1.06 (95% CI: 0.75, 1.50, p-value = 0.7), indicating there is no statistically significant association between DPCA and mortality, under a significance level of $\alpha = 0.05$. After adjusting for sex, age, serum bilirubin, histologic disease stage, no statistically significant association between DPCA and mortality was found in either adjustment model under $\alpha = 0.05$. The results may be caused by no actural preventive effects of DPCA on mortality among patients with PBC, or may be a result of insufficient sample size to detect the difference.
 
 ---
 
