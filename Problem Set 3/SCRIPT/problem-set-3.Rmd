@@ -19,27 +19,30 @@ setwd("D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Pu
 require(tidyverse)
 require(tidymodels)
 require(poissonreg)
+require(multcomp)
+require(survival)
+require(survminer)
 ```
 
 
-a. An alternative to calculating Kaplan-Meier estimates of the survival curve is to calculate **life-table estimates** when the time intervals are grouped or binned. Using the `lymphoma.csv`
+**a. An alternative to calculating Kaplan-Meier estimates of the survival curve is to calculate *life-table estimates* when the time intervals are grouped or binned. Using the `lymphoma.csv`
 data set, we could divide the total time of exposure into roughly ten bins and determine the
 numbers of deaths and person-days experienced for each of the two groups in each bin. For
-example, (0-7] is the bin more than 0 up to and including 7 days.
+example, (0-7] is the bin more than 0 up to and including 7 days.**
 
 
-Assume the following bins: (0-7], (7-15], (15-30], (30-60], (60-90], (90-120], (120-150],
-(150-180], (180-270], (270-360].
+**Assume the following bins: (0-7], (7-15], (15-30], (30-60], (60-90], (90-120], (120-150],
+(150-180], (180-270], (270-360].**
 
 
-b. Download the `csv` data set `binlymph.csv` from CoursePlus. Verify that the calculations
+**b. Download the `csv` data set `binlymph.csv` from CoursePlus. Verify that the calculations
 of total time of exposure and person-days experienced appears to be correct by reviewing the
-contents of this dataset. Also, using R create a plot of S(t) –vs.- mid_days for each group.
+contents of this dataset. Also, using R create a plot of S(t) –vs.- mid_days for each group.**
 
 
 ```{r}
 binData <- read_csv("./DATA/binlymph.csv")
-print(binData)
+binData %>% kable()
 ```
 
 
@@ -50,8 +53,8 @@ qplot(x = mid_days, y = Survival,
 ```
 
 
-c. Recall that D is the number of deaths, P_Days is the person-days accumulated in the bin and
-mid_days is the midpoint of time bin. Rename variables for simplicity:
+**c. Recall that D is the number of deaths, P_Days is the person-days accumulated in the bin and
+mid_days is the midpoint of time bin. Rename variables for simplicity:**
 
 
 ```{r}
@@ -60,7 +63,7 @@ binData <- binData %>%
 ```
 
 
-d. Fit the following four log-linear Poisson regression models to the grouped survival data
+**d. Fit the following four log-linear Poisson regression models to the grouped survival data**
 
 
 |Model|$log \, EY_i$|
@@ -71,7 +74,7 @@ d. Fit the following four log-linear Poisson regression models to the grouped su
 |D|$log \, N_i + \beta_0 + \beta_1 * stage + \beta_2 * (t-60) + \beta_3 * (t-60)^+ + \beta_4*(t-60)*stage + \beta_5*(t-60)^+*stage$|
 
 
-e. Generate time terms, centered and spline:
+**e. Generate time terms, centered and spline:**
 
 
 ```{r}
@@ -81,22 +84,241 @@ binData <- binData %>%
 ```
 
 
-f. Generate interaction terms: We don’t need to do this in R, since we can include the
-interaction directly in our model.
+**f. Generate interaction terms: We don’t need to do this in R, since we can include the
+interaction directly in our model.**
 
 
-g. Fit the models:
+**g. Fit the models:**
 
 
 ```{r}
+# modify tidy function
+my_tidy <- function(x, exponentiate = FALSE, conf.level = 0.95, ...) {
+    tidy <-
+        dplyr::bind_cols(
+            broom::tidy(x, conf.int = FALSE),
+            # calculate the confidence intervals, and save them in a tibble
+            stats::confint.default(x %>% extract_fit_engine()) %>%
+                tibble::as_tibble() %>%
+                rlang::set_names(c("conf.low", "conf.high"))
+        )
+    # exponentiating, if requested
+    if (exponentiate == TRUE) {
+        tidy <- tidy %>% dplyr::mutate_at(vars(estimate, conf.low, conf.high), exp)
+    }
+    tidy
+}
+```
+
+
+```{r}
+# poisson model specification
 poisson_spec <- poisson_reg() %>% 
-    set_engine("glm")
+    set_engine("glm") %>% 
+    set_mode("regression")
 ```
 
 
 ```{r}
 # Model A: stage
 modelA <- poisson_spec %>% 
-    fit(D ~ stage, offset = log(N), data = binData)
+    fit(D ~ stage + offset(log(N)), data = binData)
 ```
+
+
+```{r}
+# non exponentiate coefficients
+modelA %>% my_tidy() %>% kable()
+```
+
+
+```{r}
+# exponentiate coefficients - IRR
+modelA %>% my_tidy(exponentiate = TRUE) %>% kable()
+```
+
+
+```{r}
+# Model B: stage + t-60
+modelB <- poisson_spec %>% 
+    fit(D ~ stage + t60 + offset(log(N)), data = binData)
+```
+
+
+```{r}
+# non exponentiate coefficients
+modelB %>% my_tidy() %>% kable()
+```
+
+
+```{r}
+# exponentiate coefficients - IRR
+modelB %>% my_tidy(exponentiate = TRUE) %>% kable()
+```
+
+
+```{r}
+# Model C: stage + t-60 + (t-60)^+
+modelC <- poisson_spec %>% 
+    fit(D ~ stage + t60 + t60sp + offset(log(N)), data = binData)
+```
+
+
+```{r}
+# non exponentiate coefficients
+modelC %>% my_tidy() %>% kable()
+```
+
+
+```{r}
+# exponentiate coefficients - IRR
+modelC %>% my_tidy(exponentiate = TRUE) %>% kable()
+```
+
+
+```{r}
+# Model D: stage + t-60 + (t-60)^+ + stage*(t‑60) + stage*(t‑60)^+
+modelD <- poisson_spec %>% 
+    fit(D ~ stage + t60 + t60sp + stage:t60 + stage:t60sp + offset(log(N)), data = binData)
+```
+
+
+```{r}
+# non exponentiate coefficients
+modelD %>% my_tidy() %>% kable()
+```
+
+
+```{r}
+# exponentiate coefficients - IRR
+modelD %>% my_tidy(exponentiate = TRUE) %>% kable()
+```
+
+
+**h. Use the AIC = -2 log likelihood + 2(# of parameters) to identify the “best” prediction 
+model from among A-D. Interpret the model results in a few sentences, as if for a journal 
+article.**
+
+
+```{r}
+glance(modelA) %>% 
+    bind_rows(glance(modelB)) %>% 
+    bind_rows(glance(modelC)) %>% 
+    bind_rows(glance(modelD)) %>% 
+    kable()
+```
+
+
+```{r}
+modelB_lincom <- glht(modelB %>% extract_fit_engine(), linfct = c("stage+t60 = 0"))
+summary(modelB_lincom); exp(confint.default(modelB_lincom))
+```
+
+
+---
+
+According to the `AIC` statistics, the "best" prediction model is modelB, with lowest `AIC = 52.9` in these 4 models. According to the output of modelB, the incidence rate ratio compared patients in stage 4 to stage 3 is 2.57 (95% CI: 1.09, 6.05), among patients under 60 years old. According to the output of linear combination of coefficients of modelB, the incidence rate ratio compared patients in stage 4 to stage 3 is 2.55 (95% CI: 1.08, 6.02), among patients age greater than 60 years old. Both incidence rate ratios are statistically significant under $\alpha = 0.05$.
+
+---
+
+
+**i. Now use the `csv` data set `lymphoma.csv`. Calculate *Kaplan-Meier (K-M) estimates* of 
+the survival curve with 95% CI separately for each group. Plot the K-M curves against time.**
+
+
+```{r}
+lymphData <- read_csv("./DATA/lymphoma.csv")
+head(lymphData) %>% kable()
+```
+
+
+```{r}
+lymphData$SurvObj <- with(lymphData, Surv(days, died == 1))
+km.stage <- survfit(SurvObj ~ stage, data = lymphData,
+                    type = "kaplan-meier", conf.type = "log-log")
+summary(km.stage)
+```
+
+
+```{r}
+ggsurvplot(km.stage,
+           data = lymphData,
+           risk.table = TRUE,
+           conf.int = TRUE,
+           xlab = "time",
+           ylab = "s(t)",
+           title = "Kaplan-Meier survival estimates by cancer stage",
+           legend.title = "Cancer Stage",
+           legend.labs = c("Stage 3", "Stage 4"),
+           palette = "jama")
+```
+
+
+**j. Compare the K-M curves versus the display of S(t) – vs- mid_days that you produced in 
+steps a and b.**
+
+
+---
+
+The probability of survival overtime showed the same trend in both plots. The life-table method calculates the survival at the mid-point of each time intervals, and estimates the survival function using a line chart. The Kaplan-Meier method estimates the survival function at each event time through a "step" plot.
+
+---
+
+
+**k. Carry out a log-rank test and determine a p-value for the null hypothesis that the two 
+population survival curves are the same for Stage 4 -vs- Stage 3 patients. What do you 
+conclude?**
+
+
+```{r}
+survdiff(SurvObj ~ stage, data = lymphData)
+```
+
+
+---
+
+According to the output of the log-rank test, the probabilities of survival over time are statistically significantly different between these 2 groups, under $\alpha = 0.05$.
+
+---
+
+
+**l. Fit a Cox proportional hazards model with an arbitrary baseline hazard and a group effect for 
+stage.**
+
+
+```{r}
+model1 <- coxph(SurvObj ~ stage, data = lymphData, ties = "breslow")
+model1 %>% tidy(exponentiate = TRUE, conf.int = TRUE) %>% kable()
+```
+
+
+**m. Compare the results of the log-rank test from part k. with the corresponding test for the Cox 
+model in part l. Do they differ enough to change interpretation?**
+
+
+---
+
+According to the cox-regression output, the hazard ratio of death comparing patients in stage 4 to stage 3 is 2.61 (95% CI: 1.10, 6.18), and is statistically significant under $\alpha = 0.05$. The results suggest that both log-rank test and cox-regression showed significantly different probability of survival over time for patients in two stages, while cox-regression showed exactly which patient group has high probability of survival over time.
+
+---
+
+
+**n. Create an `R` script file that documents and archives the steps of your statistical analysis. This 
+file will make your analysis "reproducible."**
+
+
+**o. Summarize your findings as if for a public health journal.**
+
+
+---
+
+In this problem set, we compared the probability of survival over time comparing diffuse histiocytic lymphoma patients in stage 4 to stage 3.
+
+We first treat the data as discrete time data, and divide the total time of exposure into ten binned time intervals, and used life-table method and log-linear Poisson regression to estimate the incidence rate ratio. According to the life-table estimates, patients in stage 3 have higher probability of survival than stage 4, over time. The crude incidence rate ratio compared patients in stage 4 to stage 3 is 2.98 (95% CI: 1.27, 6.97). The adjusted incidence rate ratio compared patients in stage 4 to stage 3 is 2.57 (95% CI: 1.09, 6.05), among patients under 60 years old, adjusting for age; and the adjusted incidence rate ratio compared patients in stage 4 to stage 3 is 2.55 (95% CI: 1.08, 6.02), among patients age greater than 60 years old, adjusting for age.
+
+We then treat the data as continuous time data, and used Kaplan-Meier method and cox proportional hazard model to estimate the hazard ratio. According to the Kaplan-Meier method estimates, patients in stage 3 have higher probability of survival than stage 4, over time, and the difference is statistically significant under $\alpha = 0.05$. The crude hazard ratio compared patients in stage 4 to stage 3 is 2.61 (95% CI: 1.10, 6.18).
+
+In summary, both methods suggest a statistically significantly lower probability of survival over time, compared diffuse histiocytic lymphoma patients in stage 4 to stage 3.
+
+---
 
