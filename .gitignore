@@ -40,9 +40,9 @@ vignettes/*.pdf
 
 # Data
 Problem Set 1/data
-Problem Set 2/data
-Problem Set 3/data
-Problem Set 4/data
+Problem Set 2/DATA
+Problem Set 3/DATA
+Problem Set 4/DATA
 
 # RMarkdown output
 *.pdf

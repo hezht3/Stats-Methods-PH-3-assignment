@@ -1,0 +1,102 @@
+---
+title: "Problem Set 3"
+author: "Zhengting (Johnathan) He"
+date: "2022/3/5"
+output: html_document
+---
+
+
+```{r "setup", include = FALSE}
+require("knitr")
+opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
+opts_knit$set(root.dir = "D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 3")
+```
+
+
+```{r}
+setwd("D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 3")
+
+require(tidyverse)
+require(tidymodels)
+require(poissonreg)
+```
+
+
+a. An alternative to calculating Kaplan-Meier estimates of the survival curve is to calculate **life-table estimates** when the time intervals are grouped or binned. Using the `lymphoma.csv`
+data set, we could divide the total time of exposure into roughly ten bins and determine the
+numbers of deaths and person-days experienced for each of the two groups in each bin. For
+example, (0-7] is the bin more than 0 up to and including 7 days.
+
+
+Assume the following bins: (0-7], (7-15], (15-30], (30-60], (60-90], (90-120], (120-150],
+(150-180], (180-270], (270-360].
+
+
+b. Download the `csv` data set `binlymph.csv` from CoursePlus. Verify that the calculations
+of total time of exposure and person-days experienced appears to be correct by reviewing the
+contents of this dataset. Also, using R create a plot of S(t) –vs.- mid_days for each group.
+
+
+```{r}
+binData <- read_csv("./DATA/binlymph.csv")
+print(binData)
+```
+
+
+```{r}
+qplot(x = mid_days, y = Survival,
+      col = factor(stage, labels = c("Stage 3", "Stage 4")),
+      data = binData) + geom_line() + labs(col = "Cancer Stage") + theme_minimal()
+```
+
+
+c. Recall that D is the number of deaths, P_Days is the person-days accumulated in the bin and
+mid_days is the midpoint of time bin. Rename variables for simplicity:
+
+
+```{r}
+binData <- binData %>% 
+    rename("t" = "mid_days", "N" = "P_Days")
+```
+
+
+d. Fit the following four log-linear Poisson regression models to the grouped survival data
+
+
+|Model|$log \, EY_i$|
+|--:|:--|
+|A|$log \, N_i + \beta_0 + \beta_1 * stage$|
+|B|$log \, N_i + \beta_0 + \beta_1 * stage + \beta_2 * (t-60)$|
+|C|$log \, N_i + \beta_0 + \beta_1 * stage + \beta_2 * (t-60) + \beta_3 * (t-60)^+$|
+|D|$log \, N_i + \beta_0 + \beta_1 * stage + \beta_2 * (t-60) + \beta_3 * (t-60)^+ + \beta_4*(t-60)*stage + \beta_5*(t-60)^+*stage$|
+
+
+e. Generate time terms, centered and spline:
+
+
+```{r}
+binData <- binData %>% 
+    mutate(t60 = t - 60) %>% 
+    mutate(t60sp = ifelse(t > 60, t - 60, 0))
+```
+
+
+f. Generate interaction terms: We don’t need to do this in R, since we can include the
+interaction directly in our model.
+
+
+g. Fit the models:
+
+
+```{r}
+poisson_spec <- poisson_reg() %>% 
+    set_engine("glm")
+```
+
+
+```{r}
+# Model A: stage
+modelA <- poisson_spec %>% 
+    fit(D ~ stage, offset = log(N), data = binData)
+```
+
