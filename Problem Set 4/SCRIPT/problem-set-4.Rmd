@@ -1,0 +1,422 @@
+---
+title: "Problem Set 4"
+author: "Zhengting (Johnathan) He"
+date: "2022/3/12"
+output:
+  pdf_document: 
+    toc_depth: 2
+    latex_engine: lualatex
+  html_document: default
+  word_document: default
+header-includes:
+- \usepackage{amsmath,latexsym,amsfonts,amsthm,cleveref}
+---
+
+
+```{r "setup", include = FALSE}
+require("knitr")
+opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
+opts_knit$set(root.dir = "D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 4")
+```
+
+
+```{r}
+setwd("D:/OneDrive - Johns Hopkins/Course/140.623.81 - Statistical Methods in Public Health III/Problem set/jhsphbiostat623-assignment/Problem Set 4")
+require(tidyverse)
+require(tidymodels)
+require(poissonreg)
+require(MASS)
+require(gtsummary)
+
+framData <- read_csv("./DATA/FraminghamPS4bin.csv")
+```
+
+
+**a. Explore the data using descriptive statistics for the 641 time bins (you do not have the individual data in this binned data set):**
+
+
+```{r}
+# summary statistics of all variables
+skimr::skim(framData)
+```
+
+
+```{r}
+# summary statistics of death rate
+summary(framData$Rate)
+```
+
+
+```{r, results = "asis"}
+# explore pairwise relationships between independent variable
+# and binary mortality rate
+framData %>% 
+    mutate(Rate_bi = ifelse(Rate > 0.0000176, "high", "low")) %>% 
+    mutate(Rate_bi = factor(Rate_bi)) %>% 
+    dplyr::select(gender:agecat, Rate_bi) %>%
+    tbl_summary(by = "Rate_bi") %>% 
+    add_overall() %>% 
+    add_p()
+```
+
+
+```{r}
+# explore pairwise relationships between independent variable
+# and binary mortality rate
+framData %>% 
+    mutate(Rate_bi = ifelse(Rate > 0.0000176, "high", "low")) %>% 
+    mutate(Rate_bi = factor(Rate_bi)) %>% 
+    dplyr::select(gender:agecat, Rate_bi) %>%
+    pivot_longer(cols = - Rate_bi) %>%
+    ggplot(aes(y = value, fill = Rate_bi)) +
+    geom_bar(position = "fill") +
+    facet_wrap(vars(name), scales = "free", ncol = 2) +
+    labs(x = NULL, y = NULL, fill = NULL) +
+    theme_minimal()
+```
+
+
+As shown from the output above, all independent variables except for `cursmoke` are significantly different between the two binary mortality rate groups.
+
+
+```{r}
+framData %>% 
+    dplyr::select(gender:agecat) %>%
+    mutate(across(everything(),
+                  ~ as.numeric(.x))) %>% 
+    corrr::correlate() %>% 
+    corrr::rplot(colours = c("indianred2", "black", "skyblue1")) +
+    theme(axis.text.x = element_text(angle = 60, hjust = 1)) 
+```
+
+
+As shown the output above, `bpmeds` and `diabetes` are colinear.
+
+
+```{r}
+# Death rate across time bin
+framData %>% 
+    ggplot(aes(x = tbin, y = Rate, color = tbin)) +
+    geom_jitter() +
+    theme_minimal()
+```
+
+
+As shown from the output above, death rate may be different across time bin.
+
+
+```{r, results = "asis"}
+# explore distributions of baseline covariates across time bins
+framData %>% 
+    dplyr::select(gender:agecat, tbin) %>%
+    tbl_summary(by = "tbin") %>% 
+    add_overall() %>% 
+    add_p()
+```
+
+
+**b. Explore several Poisson regression models using these grouped survival data and select between models:**
+
+
+```{r}
+# specify Poisson model
+poisson_spec <- poisson_reg() %>% 
+    set_engine("glm") %>% 
+    set_mode("regression")
+```
+
+
+**Model 1:**
+
+
+$$
+log(D) \sim log(Y) + gender + diabetes + bmicat + agecat
+$$
+
+
+```{r}
+model1 <- poisson_spec %>% 
+    fit(D ~ gender + diabetes + bmicat + agecat + offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model1 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model1 %>% glance() %>% kable()
+```
+
+
+**Model 2:**
+
+
+$$
+log(D) \sim log(Y) + gender + bpmeds + bmicat + agecat
+$$
+
+
+```{r}
+model2 <- poisson_spec %>% 
+    fit(D ~ gender + bpmeds + bmicat + agecat + offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model2 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model2 %>% glance() %>% kable()
+```
+
+
+**Model 3:**
+
+
+$$
+log(D) \sim log(Y) + gender + diabetes + bpmeds + bmicat + agecat
+$$
+
+
+```{r}
+model3 <- poisson_spec %>% 
+    fit(D ~ gender + diabetes + bpmeds + bmicat + agecat + offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model3 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model3 %>% glance() %>% kable()
+```
+
+
+Based on `AIC` statistics, even though `diabetes` and `bpmeds` may be correlated, including both independent variables does improve model fit.
+
+
+**Model 4:**
+
+
+$$
+log(D) \sim log(Y) + gender + diabetes + bpmeds + cursmoke + bmicat + agecat
+$$
+
+
+```{r}
+model4 <- poisson_spec %>% 
+    fit(D ~ gender + diabetes + bpmeds + cursmoke + bmicat + agecat +
+            offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model4 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model4 %>% glance() %>% kable()
+```
+
+
+Based on `AIC` statistics, including `cursmoke` further improves model fit.
+
+
+**Model 5:**
+
+
+$$
+log(D) \sim log(Y) + tbin + gender + diabetes + bpmeds + cursmoke + bmicat + agecat
+$$
+
+
+```{r}
+model5 <- poisson_spec %>% 
+    fit(D ~ tbin + gender + diabetes + bpmeds + cursmoke + bmicat +
+            agecat + offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model5 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model5 %>% glance() %>% kable()
+```
+
+
+Based on `AIC` statistics, including `tbin` as continuous variable further improves model fit.
+
+
+**Model 6:**
+
+
+$$
+log(D) \sim log(Y) + [tbin1 + tbin2 + tbin3 + tbin4 + tbin5] + gender + diabetes + bpmeds + cursmoke + bmicat + agecat
+$$
+
+
+```{r}
+model6 <- poisson_spec %>% 
+    fit(D ~ factor(tbin) + gender + diabetes + bpmeds + cursmoke +
+            bmicat + agecat + offset(log(Y)),
+        data = framData)
+```
+
+
+```{r}
+model6 %>% tidy() %>% kable()
+```
+
+
+```{r}
+model6 %>% glance() %>% kable()
+```
+
+
+As shown from the output above, including `tbin` as categorical variable improves the likelihood, however the `AIC` statistics is higher, since the `AIC` statistics panalize model with larger number of independent variables.
+
+
+**Summary of all models tried:**
+
+
+```{r, results = "asis"}
+tbl_merge(list(model1, model2, model3, model4, model5, model6) %>% 
+              map(~ .x %>% tbl_regression(exponentiate = TRUE)),
+          tab_spanner = c("**Model 1**", "**Model 2**", "**Model 3**",
+                          "**Model 4**", "**Model 5**", "**Model 6**")) %>% 
+    bold_labels()
+```
+
+
+```{r}
+list(model1, model2, model3, model4, model5, model6) %>% 
+    map_dfr(~ glance(.x)) %>% 
+    kable()
+```
+
+
+Based on `AIC` statistics, we may choose **model 5**.
+
+
+**c. Check the assumptions of your Poisson models; use other models as appropriate:**
+
+
+```{r}
+model5 <- model5 %>% extract_fit_engine()
+```
+
+
+```{r}
+# Pearson chi-square goodness-of-fit test (like poisgof in Stata)
+X2 = sum(residuals(model5, type = "pearson")^2); X2
+df = model5$df.residual; df
+pval = 1-pchisq(X2, df); pval
+```
+
+
+```{r}
+model5_nb <- glm.nb(D ~ tbin + gender + diabetes + bpmeds + cursmoke +
+                        bmicat + agecat + offset(log(Y)),
+                    data = framData)
+summary(model5_nb)
+```
+
+
+```{r}
+# likelihood ratio test compare Poisson with NB
+lmtest::lrtest(model5, model5_nb) %>% tidy() %>% kable()
+```
+
+
+As shown in the goodness-of-fit test above, the Poisson model fits the data well. As shown from the likelihood ratio test above, we fail to reject the null hypothesis of $H_0: \alpha = 0$, indicating that the assumption of mean = variance of Poisson model holds.
+
+
+**d. Save your R script file that documents and archives the steps of your statistical analysis. This file will make your analysis “reproducible.”**
+
+
+**e. Summarize your findings in a brief report (less than two pages with at most one table and one figure) as if for a biomedical/public health journal.**
+
+
+**A suggested format is:**
+
++ **Introduction – a few sentences about the research question(s)**
+
++ **Data description – simple tabulations describing the distributions of characteristics by time bins**
+
++ **Results from multiple models that address question(s) (e.g., bivariate and multivariable)**
+
++ **Graphical display that presents evidence in the data relevant to your scientific question.**
+
+
+**Introduction**
+
+In this problem set, we evaluate the relationship between mortality and baseline covariates using the Framingham Heart Study, which is a long term prospective study of the etiology of cardiovascular disease among a population of free living subjects in the community of Framingham, Massachusetts. To analyze the mortality rate, the data was grouped into 5-years intervals.
+
+
+**Data description**
+
+
+As shown from the table below, there are differences in the distribution of baseline gender, current smoking status, diabetic status, use of anti-hypertensive medications, body mass index category, and age category, across time bins; however, the differences are not statistically significant based on Chi-squared test.
+
+
+```{r, echo = FALSE, results = "asis"}
+framData %>% 
+    dplyr::select(gender:agecat, tbin) %>%
+    tbl_summary(by = "tbin") %>% 
+    add_overall() %>% 
+    add_p()
+```
+
+
+**Results**
+
+
+As shown from the table below, we tried several models to explore the relationship between mortality and baseline covariates using Poisson regression, and select models based on the `AIC` statistics. In the final model selected (Model 5), the incidence rate ratio comparing female to male is 0.57 (95% CI: 0.51, 0.63); the incidence rate ratio comparing diabetes to non diabetes is 2.54 (95% CI: 2.03, 3.13); the incidence rate ratio associated with one unit increase in BMI is 1.15 (95% CI: 1.07, 1.24); the incidence rate ratio associated with one unit increase in age category is 2.24 (95% CI: 2.11, 2.38); the incidence rate ratio comparing current anti-hypertensive medications to not current users is 2.08 (95% CI: 1.67, 2.56); the incidence rate ratio comparing current smokers to not current smokers is 1.47 (95% CI: 1.32, 1.64). All incidence rate ratios are statistically significant under $\alpha = 0.05$.
+
+
+```{r, echo = FALSE}
+tbl_merge(list(model1, model2, model3, model4, model5, model6) %>% 
+              map(~ .x %>% tbl_regression(exponentiate = TRUE)),
+          tab_spanner = c("**Model 1**", "**Model 2**", "**Model 3**",
+                          "**Model 4**", "**Model 5**", "**Model 6**")) %>% 
+    bold_labels()
+```
+
+
+Based on these evidence, we suggest that male, diabetes, higher BMI, older age, anti-hypertensive medications usage, and smoking may associated with a higher rate of mortality.
+
+
+**Graphic display**
+
+
+```{r}
+(model5 %>% tbl_regression())$table_body %>%
+    select(variable, estimate, conf.low, conf.high) %>%
+    mutate(estimate = exp(estimate),
+           conf.low = exp(conf.low),
+           conf.high = exp(conf.high)) %>% 
+    slice(2:7) %>% 
+    ggplot(aes(x = variable, y = estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high, width = 0.05)) +
+    geom_hline(aes(yintercept = 1)) +
+    xlab("Independent variable") +
+    ylab("Adjusted incidence rate ratio") +
+    theme_minimal()
+```
+
